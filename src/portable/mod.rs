@@ -1,8 +1,11 @@
+use std::{
+    fs,
+    io::{self, Write},
+    path::{Path, PathBuf},
+    process::Command,
+};
+
 use reqwest::Client;
-use std::fs;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::process::Command;
 use zip::read::ZipArchive;
 
 use crate::utils;
@@ -129,8 +132,15 @@ impl Node {
             let outpath = PathBuf::from(dir_path_to_extract).join(outpath);
 
             if (&*file.name()).ends_with('/') {
+                // println!("File {} extracted to \"{}\"", i, outpath.display());
                 fs::create_dir_all(&outpath)?;
             } else {
+                // println!(
+                //     "File {} extracted to \"{}\" ({} bytes)",
+                //     i,
+                //     outpath.display(),
+                //     file.size()
+                // );
                 if let Some(p) = outpath.parent() {
                     if !p.exists() {
                         fs::create_dir_all(&p)?;
@@ -147,6 +157,88 @@ impl Node {
     pub fn eval(&self, code: &str) -> Result<(), Box<dyn std::error::Error>> {
         let output = Command::new(&self.path)
             .args(&["-e", code])
+            .envs(std::env::vars())
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .output()?;
+
+        if !output.status.success() {
+            let error_message = String::from_utf8_lossy(&output.stderr);
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                error_message.to_string(),
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub fn node_module(&self, name: &str) -> NodeModule {
+        NodeModule::new(name)
+    }
+}
+
+pub struct NodeModule {
+    name: String,
+    path: PathBuf,
+}
+
+impl NodeModule {
+    pub fn new(path_str: &str) -> Self {
+        let path = PathBuf::from(format!("{}", path_str));
+        let last_name = path
+            .components()
+            .last()
+            .unwrap()
+            .as_os_str()
+            .to_str()
+            .unwrap();
+        NodeModule {
+            name: String::from(last_name),
+            path,
+        }
+    }
+
+    pub fn ensure(&self) -> Result<(), Box<dyn std::error::Error>> {
+        if !self.path.exists() {
+            self.install()?;
+        }
+        Ok(())
+    }
+
+    pub fn install(&self) -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(target_os = "windows")]
+        let bin_path = Path::new("./bin/node/npm.cmd");
+        #[cfg(not(target_os = "windows"))]
+        let bin_path = Path::new("./bin/node/npm");
+
+        let output = Command::new(bin_path)
+            .current_dir(self.path.as_path())
+            .args(&["install", &self.name])
+            .envs(std::env::vars())
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .output()?;
+
+        if !output.status.success() {
+            let error_message = String::from_utf8_lossy(&output.stderr);
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                error_message.to_string(),
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub fn run(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        let bin_path = Path::new("./bin/node/node");
+
+        let output = Command::new(bin_path)
+            .current_dir(self.path.as_path())
+            .args(&[".", &args.join(" ")])
             .envs(std::env::vars())
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
