@@ -255,6 +255,30 @@ impl NodeModule {
 
         Ok(())
     }
+
+    pub fn run_script(&self, script: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        let bin_path = Path::new("./bin/node/npm");
+
+        let output = Command::new(bin_path)
+            .current_dir(self.path.as_path())
+            .args(&["run", script, "--", &args.join(" ")])
+            .envs(std::env::vars())
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .output()?;
+        
+        if !output.status.success() {
+            let error_message = String::from_utf8_lossy(&output.stderr);
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                error_message.to_string(),
+            )));
+        }
+
+        Ok(())  
+    }
+
 }
 
 #[cfg(test)]
