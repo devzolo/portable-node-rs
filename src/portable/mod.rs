@@ -257,6 +257,9 @@ impl NodeModule {
     }
 
     pub fn run_script(&self, script: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(target_os = "windows")]
+        let bin_path = Path::new("./bin/node/npm.cmd");
+        #[cfg(not(target_os = "windows"))]
         let bin_path = Path::new("./bin/node/npm");
 
         let output = Command::new(bin_path)
@@ -267,7 +270,7 @@ impl NodeModule {
             .stdout(std::process::Stdio::inherit())
             .stderr(std::process::Stdio::inherit())
             .output()?;
-        
+
         if !output.status.success() {
             let error_message = String::from_utf8_lossy(&output.stderr);
             return Err(Box::new(std::io::Error::new(
