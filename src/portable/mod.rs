@@ -262,9 +262,13 @@ impl NodeModule {
         #[cfg(not(target_os = "windows"))]
         let bin_path = Path::new("./bin/node/npm");
 
+        let run_args: &[&str] = if args.is_empty() { &[] } else { &["--"] };
+
         let output = Command::new(bin_path)
             .current_dir(self.path.as_path())
-            .args(&["run", script, "--", &args.join(" ")])
+            .args(&["run", script])
+            .args(run_args)
+            .args(args)
             .envs(std::env::vars())
             .stdin(std::process::Stdio::inherit())
             .stdout(std::process::Stdio::inherit())
